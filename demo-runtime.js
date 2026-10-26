@@ -53,7 +53,7 @@
  function play(video,j){
   if(!video||video.maPlayer)return;
   const segments=clone(j.plan.segments);let index=0,transition=false,playing=false;
-  const wrap=document.createElement('div');wrap.className='ma-playback';video.before(wrap);wrap.append(video);
+  const wrap=document.createElement('div');wrap.className='ma-playback';video.before(wrap);wrap.append(video);const ready=()=>video.closest('.video-preview')?.classList.remove('loading');if(video.readyState>=2)ready();video.addEventListener('loadeddata',ready);
   const caption=document.createElement('div');caption.className='ma-subtitle';caption.dataset.theme=j.plan.theme;wrap.append(caption);
   const button=document.createElement('button');button.type='button';button.className='pill sub ma-play';button.textContent='再生';button.setAttribute('aria-label','動画を再生');wrap.append(button);
   const seek=document.createElement('input');seek.type='range';seek.min=0;seek.max=segments.reduce((a,s)=>a+s.out-s.in,0);seek.step=.01;seek.value=0;seek.className='ma-seek';seek.setAttribute('aria-label','再生位置');wrap.append(seek);
