@@ -2,12 +2,13 @@
  const nativeFetch=window.fetch.bind(window), base=new URL('.',document.currentScript.src), KEY='ma_static_demo_v1';
  const clone=x=>structuredClone(x), asset=p=>new URL(p,base).href;
  let state;
- const ready=nativeFetch(asset('local-fixtures/plan.json')).then(r=>r.json()).then(p=>{
+ let sample=null;
+ const ready=nativeFetch(asset('local-fixtures/plan.json')).then(r=>r.json()).then(p=>{sample=p;
   try{state=JSON.parse(localStorage.getItem(KEY));}catch{}
   if(!state)state={job:seed(p),snapshots:[]};
   save();
  });
- function seed(p){return {id:'j_de0001',title:'ひかりの住まい',created_at:Math.floor(Date.now()/1000),status:'needs_input',form:{property_name:'ひかりの住まい',deal:'rent',price:'12',layout:'1LDK',area:'45',company_name:'間不動産',target:{household:'couple'},catch_strength:'normal',rooms:[{name:'ダイニング',features:'明るい窓'},{name:'リビング',features:'12.5帖'}]},files:[...p.segments.map((s,i)=>({id:`f_scene_${i}`,kind:'source',name:`${s.room}.mp4`,duration:s.out,size:1})),{id:'f_logo',kind:'logo',name:'ロゴ'}],analysis:{rooms:p.segments.map(s=>({name:s.room,features:[]})),suggest:{},unclear:[],theme:'modern'},plan:{...clone(p),caption:'光が届く1LDKの住まい',hashtags:[],theme:'modern'},events:[],credits:{used:0,cap:100},versions:[],outputs:null};}
+ function seed(p){return {id:'j_de0001',title:'ひかりの住まい',created_at:Math.floor(Date.now()/1000),status:'needs_input',form:{property_name:'ひかりの住まい',deal:'rent',price:'12',layout:'1LDK',area:'45',company_name:'間不動産',target:{household:'couple'},catch_strength:'normal',rooms:[{name:'ダイニング',features:'明るい窓'},{name:'リビング',features:'12.5帖'}]},files:[{id:'f_logo',kind:'logo',name:'ロゴ'}],analysis:null,plan:{...clone(p),caption:'光が届く1LDKの住まい',hashtags:[],theme:'modern'},events:[],credits:{used:0,cap:100},versions:[],outputs:null};}
  function save(){localStorage.setItem(KEY,JSON.stringify(state));}
  function file(id){return asset(/logo|floorplan/.test(id)?'assets/ma-logo.png':`local-fixtures/scene-${Number(String(id).match(/\d+$/)?.[0]||0)%4}.mp4`);}
  function finish(j){
@@ -74,7 +75,7 @@
   seek.oninput=()=>video.maPlayer.seek(Number(seek.value));
   load(0,segments[0].in,false);
  }
- window.maDemo={file,play,job:()=>clone(state.job),useSamples:()=>{state.job.status='needs_input';save();location.hash=`#/job/${state.job.id}/b`;},ready};
+ window.maDemo={file,play,job:()=>clone(state.job),useSamples:()=>{const j=state.job;const had=j.files.some(f=>f.kind==='source');if(sample&&!had){j.files.unshift(...sample.segments.map((s,i)=>({id:`f_scene_${i}`,kind:'source',name:`${s.room}.mp4`,duration:s.out,size:1})));j.analysis={rooms:sample.segments.map(s=>({name:s.room,features:[]})),suggest:{},unclear:[],theme:'modern'};}j.status='needs_input';save();if(had){location.hash=`#/job/${state.job.id}/${matchMedia('(min-width:1024px)').matches?'c':'b'}`;return;}const h=`#/job/${state.job.id}/${matchMedia('(min-width:1024px)').matches?'c':'b'}`;if(location.hash===h)location.reload();else{location.hash=h;location.reload();}},ready};
  document.addEventListener('DOMContentLoaded',()=>{
   if(!document.getElementById('app'))return;
   const menu=document.createElement('details');menu.className='ma-menu';menu.innerHTML='<summary aria-label="メニュー">メニュー</summary><button class="pill sub" type="button">最初からやり直す</button>';

@@ -4,13 +4,44 @@ export const subtitle = (p,s) => s.telop ?? (s.type === 'eyecatch' ? p.catch.lin
 export const seconds = length;
 export const formatSeconds = s => `${Number(s).toFixed(1)} 秒`;
 let composition=null;
+export function desktopWorkspace(app) {
+  if (!matchMedia('(min-width:1024px)').matches) return;
+  const media=app.querySelector('#composition-timeline,#completed-timeline,#revision-timeline');
+  if(!media) return;
+  const glass=media.closest('.glass'), revision=media.id==='revision-timeline';
+  const workspace=document.createElement('div');workspace.className='pc-workspace';
+  const left=document.createElement('div');left.className='pc-preview';
+  const right=document.createElement('div');right.className='pc-controls';
+  const fields=document.createElement('div');fields.className='pc-control-fields';
+  const actions=document.createElement('footer');actions.className='pc-control-actions';
+  const heading=glass.querySelector('h1');
+  const container=revision?media.parentElement:glass;
+  if(revision) {
+    for(const child of [...container.children]) if(child!==media) fields.append(child);
+    fields.querySelector('.revision-fields').classList.remove('scroll');
+    for(const id of ['send-revision','cancel-revision']) actions.append(fields.querySelector('#'+id));
+  } else {
+    const scroll=glass.querySelector('.scroll');
+    if(media.id==='composition-timeline') {
+      for(const child of [...media.children]) if(!child.matches('video,.timeline-scroll')) fields.append(child);
+    }
+    media.remove();
+    fields.append(...scroll.childNodes);scroll.remove();
+    const row=glass.querySelector(':scope > .row2');actions.append(row);
+    if(media.id==='completed-timeline') actions.prepend(fields.querySelector('#reedit'));
+    for(const child of [...glass.children]) if(child!==heading) fields.append(child);
+  }
+  left.append(media);right.append(fields,actions);workspace.append(left,right);
+  if(revision) container.replaceWith(workspace);else glass.append(workspace);
+  glass.classList.add('pc-workspace-shell');
+}
 export function sceneCards() {
   return `<div id="composition-timeline"><video class="finished" controls playsinline></video>${timelineHtml()}<h2 class="ttl2" id="scene-title"></h2><label class="lb">字幕<textarea class="in" id="plan-caption"></textarea></label><label class="lb">ナレーション<textarea class="in" id="plan-narration"></textarea></label></div>`;
 }
 export function bindComposition(j,grabFrame) {
   composition?.destroy();const root=document.getElementById('composition-timeline');if(!root){composition=null;return;}
-  const caption=root.querySelector('#plan-caption'),narration=root.querySelector('#plan-narration');
-  composition=mountTimeline(root,j,{video:root.querySelector('video'),grabFrame,onSelect:s=>{root.querySelector('#scene-title').textContent=s.room || '選んだ場面';caption.value=subtitle(j.plan,s);narration.value=s.narration;}});
+  const caption=document.getElementById('plan-caption'),narration=document.getElementById('plan-narration');
+  composition=mountTimeline(root,j,{video:root.querySelector('video'),grabFrame,onSelect:s=>{document.getElementById('scene-title').textContent=s.room || '選んだ場面';caption.value=subtitle(j.plan,s);narration.value=s.narration;}});
   caption.oninput=()=>{composition.current().telop=caption.value;};narration.oninput=()=>{composition.current().narration=narration.value;};
 }
 export const readComposition = () => composition.read();
@@ -27,6 +58,7 @@ export function revisionEditor(j, { app, shell, post, reload, grabFrame }) {
   let notes=[],point=null,changes=new Map(),timeline;
   const record=(id,text)=>{changes.set(id,text);drawList();};
   app.innerHTML=shell(j,`<h1 class="ttl">場面を修正</h1><div class="revise"><div id="revision-timeline"><div class="video-preview"><img class="loading-poster" src="${esc(j.outputs.publish_thumbnail || j.outputs.thumbnail)}" alt=""><video class="finished" playsinline preload="auto" poster="${esc(j.outputs.publish_thumbnail || j.outputs.thumbnail)}" src="${esc(j.outputs.publish)}"></video><button type="button" class="preview-play pill sub" aria-label="動画を再生">再生</button></div>${timelineHtml()}</div><h2 class="ttl2" id="scene-title"></h2><div class="part-actions"><button class="pill sub" id="cut-part">切る</button><button class="pill sub" id="edit-caption">字幕を直す</button><button class="pill sub" id="write-note">修正指示</button></div><div class="scroll revision-fields"><div id="caption-panel" hidden><label class="lb">字幕<textarea class="in" id="rev-caption"></textarea></label></div><div class="correction" id="note-panel" hidden><div class="frame-point" id="frame-point" role="button" tabindex="0" aria-label="修正箇所に印を付ける"><img id="large-frame" alt="選んだコマ"><span id="pin" hidden></span></div><div class="correction-fields"><label class="lb" id="note-label">修正箇所<textarea class="in" id="rev-note" placeholder="例 この場面が暗い"></textarea></label><button class="pill sub" id="add-note">指示を追加</button></div></div><h2 class="ttl2">変更一覧</h2><ul id="revision-list" class="revision-list"></ul><p role="alert" id="revision-error"></p><button class="pill main" id="send-revision">修正して書き出す</button><button class="pill sub" id="cancel-revision">完成動画に戻る</button></div></div>`);
+  desktopWorkspace(app);
   const get=id=>document.getElementById(id),video=app.querySelector('video');
   window.maDemo.play(video,j);
   const preview=video.closest(".video-preview");const loading=()=>{preview.classList.add('loading');video.controls=false;};const ready=()=>{if(video.readyState>=2&&!video.seeking){preview.classList.remove('loading');video.controls=false;}};for(const event of ['loadstart','waiting','seeking'])video.addEventListener(event,loading);for(const event of ['loadeddata','canplay','seeked','playing'])video.addEventListener(event,ready);loading();ready();const play=preview.querySelector('.preview-play');play.onclick=()=>video.paused?video.play():video.pause();video.addEventListener('play',()=>{play.textContent='一時停止';play.setAttribute('aria-label','動画を一時停止');});video.addEventListener('pause',()=>{play.textContent='再生';play.setAttribute('aria-label','動画を再生');});
@@ -40,6 +72,7 @@ export function revisionEditor(j, { app, shell, post, reload, grabFrame }) {
   let shown=null,frameRequest=0;
   const show=s=>{
     if(shown&&shown!==s.id&&get('rev-note').value.trim()){notes.push({id:shown,text:get('rev-note').value.trim(),point});get('rev-note').value='';drawList();}
+    if(shown===s.id)return;
     shown=s.id;get('scene-title').textContent=s.room || '選んだ場面';get('rev-caption').value=subtitle(j.plan,s);
     point=null;get('pin').hidden=true;get('note-label').firstChild.textContent='修正箇所';
     get('large-frame').src=j.outputs.publish_thumbnail || j.outputs.thumbnail;

@@ -1,4 +1,4 @@
-import { sceneCards, fillFrames, revisionEditor, bindComposition, readComposition, seconds, formatSeconds } from "./revise.js";
+import { desktopWorkspace, sceneCards, fillFrames, revisionEditor, bindComposition, readComposition, seconds, formatSeconds } from "./revise.js";
 import { timelineHtml, mountTimeline } from "./timeline.js";
 // 間 —ma—（内見動画メーカー）フロント。デザイン M2（2026-10-22 東さん選定）。フレームワークなし。文字は必ず esc() を通して表示する。
 // 1問ずつのカード: a 動画を入れる → b 読み取り → c 物件 → d 誰に → e 編集 → f 会社・ロゴ →「動画を作る」→ 構成の確認 → 書き出し → 完成
@@ -14,7 +14,7 @@ const EDITABLE = new Set(["draft", "analyzing", "needs_input"]);
 const CUR = "rt_cur_job";
 const HOUSE = [["single", "単身"], ["couple", "夫婦・カップル"], ["family", "子育てファミリー"], ["senior", "シニア"]];
 // 編集バリエーション → 既存の catch_strength（バックエンドは変えない）
-const VARS = [["strong", "テンポよく"], ["soft", "落ち着いて"], ["normal", "上質に"]];
+const VARS = [["strong", "強め"], ["normal", "標準"], ["soft", "控えめ"]];
 const QSTEPS = ["b", "c", "d", "e", "f"];   // 点と「n / 5」
 let timer = null;
 
@@ -104,7 +104,7 @@ async function route() {
     if (j && (EDITABLE.has(j.status) || (j.status === "failed" && !j.plan))) { history.replaceState(null, "", `#/job/${j.id}/${firstStep(j)}`); return editor(j, firstStep(j)); }
     localStorage.removeItem(CUR);
   }
-  const demoJob=window.maDemo.job(); return demoJob.status === "needs_input" ? editor(demoJob,"c") : jobView(demoJob);
+  const demoJob=window.maDemo.job(); return demoJob.status === "needs_input" ? editor(demoJob, demoJob.files.some((x) => x.kind === "source") ? "c" : "a") : jobView(demoJob);
 }
 function firstStep(j) {
   const f = j.form || {};
@@ -204,7 +204,7 @@ function show(step) {
   const R = { a: cardA, b: cardB, c: cardC, d: cardD, e: cardE, f: cardF, more: cardMore }[step] || cardA;
   $app.innerHTML = desktop() ? desktopForm() : R();
   $app.classList.add("input-editor");
-  standardFields();
+  if (!desktop()) standardFields();
   $app.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go2(b.dataset.go)));
   bindCommon();
   paint();
@@ -216,10 +216,41 @@ function cardBody(render) {
   body.querySelectorAll("#next,.left,.sum,#make,#why,.c:has(a),button[data-go],h2.ttl2").forEach(el => el.remove());
   return body.innerHTML;
 }
+// パソコンの入力画面: 左に動画と読み取り、右に普通の入力フォーム（不動産ポータルの物件入力と iPhone の設定画面の形）
+const STRENGTH = [["strong", "強め"], ["normal", "標準"], ["soft", "控えめ"]];
 function desktopForm() {
-  return `<div class="pc-editor glass"><header class="pc-header"><img src="./assets/ma-logo.png" alt="間 ma"><h1 class="ttl">物件の動画を作る</h1></header>
-    <aside class="pc-media">${pickInput}<video id="source-player" controls playsinline preload="auto" poster="${esc(S.thumbs[sources()[0]?.id] || DEFAULT_BG)}"></video><div id="thumbs" class="thumbs"></div><p id="count" class="count"></p><div id="aiBox"></div><div id="analysis-results"></div></aside>
-    <form class="pc-form" onsubmit="return false"><div class="pc-fields">${[cardC,cardD,cardE,cardF].map(fn=>`<section class="form-section">${cardBody(fn)}</section>`).join("")}<details class="form-details"><summary>詳細情報 <small>任意</small></summary>${cardBody(cardMore)}</details></div><footer class="form-action"><button type="button" class="pill main" id="make">動画を作る</button><p id="why" class="why"></p></footer></form></div>`;
+  const f = S.form, t = f.target, rent = f.deal === "rent", a = S.job?.analysis || {};
+  const fld = (k, label, { req = false, unit = "", ph = "", mode = "", span = 1 } = {}) => {
+    const val = k.startsWith("target.") ? t[k.slice(7)] : f[k];
+    return `<div class="pf" id="fld-${k}" style="grid-column:span ${span}"><label class="pf-l" for="pf-${k}">${label}${req ? " <small>必須</small>" : ""}${aiBadge(k)}</label><div class="pf-in${unit ? " u" : ""}"><input id="pf-${k}" data-f="${k}" value="${v(val)}" placeholder="${esc(ph)}" ${mode ? `inputmode="${mode}"` : ""} autocomplete="off">${unit ? `<span>${unit}</span>` : ""}</div></div>`;
+  };
+  const money = rent
+    ? [fld("price", "賃料", { req: true, unit: "万円", ph: "12.5", mode: "decimal" }), fld("management_fee", "管理費・共益費", { unit: "円", ph: "8000", mode: "numeric" })]
+    : [fld("price", "価格", { req: true, unit: "万円", ph: "4980", mode: "decimal" }), fld("loan_monthly", "月々の返済目安", { ph: "12.8万円" }), fld("management_fee", "管理費", { unit: "円", mode: "numeric" }), fld("repair_reserve", "修繕積立金", { unit: "円", mode: "numeric" })];
+  const prop = [...money, fld("layout", "間取り", { req: true, ph: "1LDK" }), fld("area", rent ? "専有面積" : "専有面積・土地面積", { unit: "㎡", ph: "45", mode: "decimal" }),
+    fld("floor", "所在階", { unit: "階", mode: "numeric" }), fld("floors_total", "建物の階数", { unit: "階建て", mode: "numeric" }), fld("orientation", "向き", { ph: "南" }), fld("built", "築年数", { ph: "築8年" }),
+    fld("station", "最寄り駅", { ph: "月島駅" }), fld("walk_min", "駅から徒歩", { unit: "分", mode: "numeric" }), fld("property_name", "物件名", { ph: "クレイシア月島 305号室", span: 3 })].join("");
+  const hasFloor = !!(S.job?.files.some((x) => x.kind === "floorplan") || S.floorplanFile);
+  const qs = (a.unclear || []).filter((u) => !{ layout: 1, area: 1, floor: 1, orientation: 1 }[u.field]);
+  const rooms = roomsList();
+  const none = !sources().length && !liveUps().length;
+  return `<div class="pc-editor glass pc-v2"><header class="pc-header"><img src="./assets/ma-logo.png" alt="間 ma"><h1 class="ttl">物件の動画を作る</h1></header>
+    <aside class="pc-media">${pickInput}<h2 class="pc-h">内見動画</h2>
+      <div class="pf-drop" id="pcDrop" ${none ? "" : "hidden"}><p>ここに動画をドラッグ</p><button type="button" class="pf-btn" data-pick>見本の素材を選ぶ</button><p class="pf-note">縦向き 6本まで</p></div>
+      <video id="source-player" controls playsinline preload="auto" ${none ? "hidden" : ""} poster="${esc(S.thumbs[sources()[0]?.id] || "")}"></video><div id="thumbs" class="thumbs" ${none ? "hidden" : ""}></div><p id="count" class="count" ${none ? "hidden" : ""}></p><div id="aiBox"></div><div id="analysis-results"></div></aside>
+    <form class="pc-form" onsubmit="return false"><div class="pc-fields">
+      <section class="pc-sec"><h2>物件情報</h2><div class="pc-tabs" role="tablist">${[["rent", "賃貸"], ["sale", "売買"]].map(([k, l]) => `<button type="button" role="tab" aria-selected="${f.deal === k}" class="${f.deal === k ? "on" : ""}" data-deal="${k}">${l}</button>`).join("")}</div><div class="pf-grid">${prop}</div></section>
+      <section class="pc-sec"><h2>間取り図</h2><div class="pf-file"><input type="file" id="floorplanPick" accept="image/png,image/jpeg,image/webp" hidden><button type="button" class="pf-btn" id="floorplanBtn2">${hasFloor ? "画像を変更" : "画像をアップロード"}</button><button type="button" class="pf-thumb" id="floorplanBtn" aria-label="間取り図">${floorplanInner()}</button><span class="pf-note">${hasFloor ? "" : "PNG・JPG"}</span></div></section>
+      <section class="pc-sec"><h2>見せたい相手</h2><div class="pf" id="fld-household"><span class="pf-l">世帯 <small>必須</small></span><div class="pf-pills">${HOUSE.map(([k, l]) => `<button type="button" class="pf-pill ${t.household === k ? "on" : ""}" data-house="${k}" aria-pressed="${t.household === k}">${l}</button>`).join("")}</div></div>
+        <div class="pf-grid">${fld("target.age", "年齢層", { ph: "30代" })}${fld("target.kids_ages", "子どもの年齢", { ph: "0歳・3歳" })}</div>
+        <div class="pf-checks">${[["remote_work", "在宅ワーク"], ["car", "車あり"], ["pet", "ペットあり"]].map(([k, l]) => `<label class="pf-check"><input type="checkbox" data-f="target.${k}" ${t[k] ? "checked" : ""}>${l}</label>`).join("")}</div></section>
+      <section class="pc-sec"><h2>動画の冒頭</h2><div class="pf-grid">${fld("catch_idea", "冒頭の一言（12文字まで）", { ph: "12階から海を一望", span: 2 })}<div class="pf"><span class="pf-l">言い方</span><div class="pf-pills">${STRENGTH.map(([k, l]) => `<button type="button" class="pf-pill ${(f.catch_strength || "normal") === k ? "on" : ""}" data-var="${k}" aria-pressed="${(f.catch_strength || "normal") === k}">${l}</button>`).join("")}</div></div>${fld("selling_point", "一番見せたい所", { ph: "バルコニーから海が見える", span: 3 })}</div><p class="pf-note">「最高」「絶景」などの言葉は使えません</p></section>
+      ${rooms.length ? `<section class="pc-sec"><h2>部屋ごとの特徴</h2>${rooms.map((r, i) => `<div class="pf-room"><input data-rm="${i}" data-rk="name" value="${v(r.name)}" aria-label="部屋"><input data-rm="${i}" data-rk="features" value="${v(r.features)}" aria-label="特徴" placeholder="例: 12.5帖・大きな窓"></div>`).join("")}</section>` : ""}
+      ${qs.length ? `<section class="pc-sec"><h2>AIからの確認</h2>${qs.map((u) => `<div class="pf"><label class="pf-l">${esc(u.question)}</label><div class="pf-in"><input data-q="${esc(u.question)}" value="${v(f.answers[u.question])}"></div></div>`).join("")}</section>` : ""}
+      <section class="pc-sec"><h2>会社情報</h2><div class="pf-grid">${fld("company_name", "会社名", { req: true, span: 2 })}<div class="pf" id="fld-logo"><span class="pf-l">ロゴ <small>必須</small></span><div class="pf-file"><input type="file" id="logoPick" accept="image/png,image/jpeg,image/webp" hidden><button type="button" class="pf-btn" id="logoBtn2">${hasLogo() ? "画像を変更" : "画像をアップロード"}</button><button type="button" class="pf-thumb logo" id="logoBtn" aria-label="ロゴ">${logoInner()}</button></div></div>
+        ${fld("license_no", "宅建業免許番号", { ph: "東京都知事(1)第00000号", span: 2 })}${fld("deal_type", "取引態様", { ph: "仲介" })}${fld("line_url", "LINE の URL", { ph: "https://lin.ee/…", span: 2 })}${fld("brand_color", "ブランドカラー", { ph: "#0E2A47" })}${fld("address", "所在地", { span: 3 })}</div></section>
+      <section class="pc-sec"><h2>掲載しない内容</h2><div class="pf"><textarea class="pf-ta" data-f="ng_items" placeholder="売主さまの希望で映さない所など">${v(f.ng_items)}</textarea></div></section>
+    </div><footer class="form-action"><p id="why" class="why"></p><button type="button" class="pill main" id="make">動画を作る</button></footer></form></div>`;
 }
 matchMedia("(min-width:1024px)").addEventListener("change",()=>{ if(S && $app.classList.contains("input-editor")) show(S.step); });
 function standardFields() {
@@ -239,6 +270,7 @@ function standardFields() {
 }
 function paintSource() {
   const player=document.getElementById('source-player'), src=sources();
+  const none=!src.length && !liveUps().length; ['source-player','thumbs','count'].forEach(id=>{const el=document.getElementById(id); if(el && $app.querySelector('.pc-v2')) el.hidden=none;}); const drop=document.getElementById('pcDrop'); if(drop) drop.hidden=!none;
   if(player && src.length && !src.some(f=>f.id===player.dataset.file)) { player.dataset.file=src[0].id; player.src=window.maDemo.file(src[0].id); }
   const result=document.getElementById('analysis-results'), a=S.job?.analysis;
   if(result && a) {
@@ -275,7 +307,7 @@ function cardA() {
       <img class="ic" src="./assets/icon-video.png" alt="">
       <h1 class="ttl c">内見動画を選ぶ</h1>
       <p class="sub c">縦向き・6本まで</p>
-      <button type="button" class="pill main" data-pick>見本の素材を選ぶ</button>
+      <button type="button" class="pill main" data-pick>動画を選ぶ</button>
     </div>`, below: `<a class="under" href="#/list">動画一覧</a>` });
 }
 // ---- b 読み取り ----
@@ -298,7 +330,7 @@ function cardC() {
     <hr class="hair">
     <div class="fld" id="fld-layout"><label class="lb" for="layout">間取り</label>
       <div class="big"><input id="layout" data-f="layout" autocomplete="off" value="${v(f.layout)}" placeholder="${S.job?.status === "analyzing" ? "読み取り中…" : "例: 2LDK"}"></div>${aiBadge("layout")}</div>
-    <div class="fld"><span class="lb">間取り図 <small>任意</small></span><div class="lg"><button type="button" class="logo" id="floorplanBtn" aria-label="間取り図を選ぶ">${floorplanInner()}</button><button type="button" class="txt u" id="floorplanBtn2">${S.job?.files.some(x => x.kind === "floorplan") || S.floorplanFile ? "変える" : "選ぶ"}</button></div><input type="file" id="floorplanPick" accept="image/png,image/jpeg,image/webp" hidden></div>
+    <div class="fld"><span class="lb">間取り図 <small>任意</small></span><div class="lg"><button type="button" class="logo" id="floorplanBtn" aria-label="間取り図を選ぶ">${floorplanInner()}</button><button type="button" class="txt u" id="floorplanBtn2">${S.job?.files.some(x => x.kind === "floorplan") || S.floorplanFile ? "画像を変更" : "画像をアップロード"}</button></div><input type="file" id="floorplanPick" accept="image/png,image/jpeg,image/webp" hidden></div>
     ${left("c")}
     <button type="button" class="pill main" id="next" data-go="d">次へ</button>` });
 }
@@ -322,8 +354,8 @@ function cardD() {
 function cardE() {
   const cur = S.form.catch_strength || "normal";
   return shell({ step: "e", chips: chipsHtml("e"), body: `
-    <h1 class="ttl">編集スタイル</h1>
-    <p class="lb">編集スタイル <small>任意</small></p><div class="vars">${VARS.map(([k, l], i) => `<button type="button" class="var ${cur === k ? "on" : ""}" data-var="${k}" aria-pressed="${cur === k}"><span class="vth" data-vth="${i}"></span><span class="vl">${l}</span></button>`).join("")}</div>
+    <h1 class="ttl">冒頭の言い方</h1>
+    <p class="lb">言い方 <small>任意</small></p><div class="vars">${VARS.map(([k, l], i) => `<button type="button" class="var ${cur === k ? "on" : ""}" data-var="${k}" aria-pressed="${cur === k}"><span class="vth" data-vth="${i}"></span><span class="vl">${l}</span></button>`).join("")}</div>
     ${left("e")}
     <button type="button" class="pill main" id="next" data-go="f">次へ</button>` });
 }
@@ -331,13 +363,13 @@ function cardE() {
 function cardF() {
   const f = S.form;
   const n = sources().length + liveUps().filter((u) => !u.err).length;
-  const sum = [["b", `動画 ${n}本`], ["c", [f.deal === "rent" ? "賃貸" : "売買", f.price ? `${f.price}万円` : "価格 未入力", f.layout || "間取り 未入力"].join("・")], ["d", HOUSE.find((x) => x[0] === f.target.household)?.[1] || "入居者 未選択"], ["e", VARS.find((x) => x[0] === f.catch_strength)?.[1] || "上質に"]];
+  const sum = [["b", `動画 ${n}本`], ["c", [f.deal === "rent" ? "賃貸" : "売買", f.price ? `${f.price}万円` : "価格 未入力", f.layout || "間取り 未入力"].join("・")], ["d", HOUSE.find((x) => x[0] === f.target.household)?.[1] || "入居者 未選択"], ["e", VARS.find((x) => x[0] === f.catch_strength)?.[1] || "標準"]];
   return shell({ step: "f", body: `
     <h1 class="ttl">会社名・ロゴ</h1>
     <div class="co">
       <div class="fld" id="fld-company_name"><label class="lb" for="company">会社名</label><input id="company" class="mid" data-f="company_name" value="${v(f.company_name)}" placeholder="会社名" autocomplete="organization"></div>
       <div class="vr"></div>
-      <div class="fld" id="fld-logo"><span class="lb">ロゴ <small>必須</small></span><div class="lg"><button type="button" class="logo" id="logoBtn" aria-label="ロゴを選ぶ">${logoInner()}</button><button type="button" class="txt u" id="logoBtn2">${hasLogo() ? "変える" : "選ぶ"}</button></div>
+      <div class="fld" id="fld-logo"><span class="lb">ロゴ <small>必須</small></span><div class="lg"><button type="button" class="logo" id="logoBtn" aria-label="ロゴを選ぶ">${logoInner()}</button><button type="button" class="txt u" id="logoBtn2">${hasLogo() ? "画像を変更" : "画像をアップロード"}</button></div>
       <input type="file" id="logoPick" accept="image/png,image/jpeg,image/webp" hidden></div>
     </div>
     <hr class="hair">
@@ -417,7 +449,7 @@ function paint() {
   if (st === "e" || desktop()) paintE();
   if (st === "c" || desktop()) { const l = document.getElementById("layout"); if (l && document.activeElement !== l && l.value !== S.form.layout) l.value = S.form.layout; const fl = document.getElementById("fld-layout"); fl?.querySelector(".aib")?.remove(); fl?.insertAdjacentHTML("beforeend", aiBadge("layout")); }
   if (st === "c" || desktop()) { fitPrice(); document.fonts?.ready.then(fitPrice); }
-  if (st === "f" || desktop()) { const lb = document.getElementById("logoBtn"); if (lb) { lb.innerHTML = logoInner(); toneLogo(lb); } const lb2 = document.getElementById("logoBtn2"); if (lb2) lb2.textContent = hasLogo() ? "変える" : "選ぶ"; }
+  if (st === "f" || desktop()) { const lb = document.getElementById("logoBtn"); if (lb) { lb.innerHTML = logoInner(); toneLogo(lb); } const lb2 = document.getElementById("logoBtn2"); if (lb2) lb2.textContent = desktop() ? (hasLogo() ? "画像を変更" : "画像をアップロード") : (hasLogo() ? "画像を変更" : "画像をアップロード"); }
   if (S.floorplanFile && S.job && !RUNNING.has(S.job.status)) uploadFloorplan();
   if (S.logoFile && S.job && S.job.status !== "analyzing") uploadLogo();
   $app.querySelectorAll('[data-f]').forEach(el=>{const k=el.dataset.f,val=k.startsWith('target.')?S.form.target[k.slice(7)]:S.form[k];if(document.activeElement!==el && el.type!=='checkbox' && val!==undefined && el.value!==String(val)) el.value=val;});
@@ -426,7 +458,7 @@ function paint() {
 let bound = null;
 function bindStep() {
   const g = $app.querySelector(".glass"); if (!g || bound === g) return; bound = g;
-  g.querySelectorAll("[data-deal]").forEach((b) => (b.onclick = () => { S.form.deal = b.dataset.deal; g.querySelectorAll("[data-deal]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); }); scheduleSave(); }));
+  g.querySelectorAll("[data-deal]").forEach((b) => (b.onclick = () => { S.form.deal = b.dataset.deal; scheduleSave(); if (desktop()) { const y = g.querySelector(".pc-fields")?.scrollTop || 0; show(S.step); const nf = $app.querySelector(".pc-fields"); if (nf) nf.scrollTop = y; return; } g.querySelectorAll("[data-deal]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); }); }));
   g.querySelectorAll("[data-house]").forEach((b) => (b.onclick = () => { S.form.target.household = b.dataset.house; delete S.ai.household; g.querySelectorAll("[data-house]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); x.querySelector(".aib")?.remove(); }); document.getElementById("fld-household")?.classList.remove("miss"); scheduleSave(); paintBtn(); }));
   g.querySelectorAll("[data-var]").forEach((b) => (b.onclick = () => { S.form.catch_strength = b.dataset.var; g.querySelectorAll("[data-var]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); }); scheduleSave(); }));
   g.querySelectorAll("[data-q]").forEach((el) => (el.oninput = () => { S.form.answers[el.dataset.q] = el.value.trim(); scheduleSave(); }));
@@ -435,7 +467,7 @@ function bindStep() {
   const fp = document.getElementById("floorplanPick");
   if (fp) {
     document.getElementById("floorplanBtn").onclick = document.getElementById("floorplanBtn2").onclick = () => fp.click();
-    fp.onchange = () => { const file = fp.files[0]; if (!file) return; S.floorplanFile = file; S.floorplanError = ""; if (S.floorplanPreview) URL.revokeObjectURL(S.floorplanPreview); S.floorplanPreview = URL.createObjectURL(file); document.getElementById("floorplanBtn").innerHTML = floorplanInner(); document.getElementById("floorplanBtn2").textContent = "変える"; uploadFloorplan(); };
+    fp.onchange = () => { const file = fp.files[0]; if (!file) return; S.floorplanFile = file; S.floorplanError = ""; if (S.floorplanPreview) URL.revokeObjectURL(S.floorplanPreview); S.floorplanPreview = URL.createObjectURL(file); document.getElementById("floorplanBtn").innerHTML = floorplanInner(); document.getElementById("floorplanBtn2").textContent = "画像を変更"; uploadFloorplan(); };
   }
   const lp = document.getElementById("logoPick");
   if (lp) {
@@ -443,6 +475,8 @@ function bindStep() {
     document.getElementById("logoBtn").onclick = open; document.getElementById("logoBtn2").onclick = open;
     lp.onchange = () => { const file = lp.files[0]; if (!file) return; S.logoFile = file; S.logoPreview = URL.createObjectURL(file); document.getElementById("fld-logo")?.classList.remove("miss"); if (S.job) uploadLogo(); else paint(); };
   }
+  const pd = document.getElementById("pcDrop");
+  if (pd) { pd.ondragover = (e) => { e.preventDefault(); pd.classList.add("over"); }; pd.ondragleave = () => pd.classList.remove("over"); pd.ondrop = (e) => { e.preventDefault(); pd.classList.remove("over"); window.maDemo.useSamples(); }; }
   const mk = document.getElementById("make"); if (mk) mk.onclick = submit;
   const nx = document.getElementById("next");
   if (nx && S.step === "b") nx.onclick = () => { if (!sources().length && !uploading()) return toast("動画を選択してください", true); go2("c"); };
@@ -754,6 +788,7 @@ function jobView(j, keepScroll) {
   const y = $app.querySelector(".scroll")?.scrollTop || 0;
   $app.innerHTML = afterShell(j, body);
   if (keepScroll) { const sc = $app.querySelector(".scroll"); if (sc) sc.scrollTop = y; }
+  desktopWorkspace($app);
   window.maDemo.play(document.querySelector("#completed-timeline video"),j);
   bindJob(j);
   if (RUNNING.has(j.status)) timer = setTimeout(async () => { const n = await api(`/api/jobs/${j.id}`).catch(() => j); if (location.hash === `#/job/${j.id}`) jobView(n, true); }, 4000);
@@ -770,7 +805,7 @@ function bindJob(j) {
   });
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = async (e) => { e.preventDefault(); if (el.disabled) return; el.disabled = true; try { await fn(); } catch (err) { toast(err.message, true); } finally { el.disabled = false; } }; };
   const reload = async () => jobView(await api(`/api/jobs/${j.id}`));
-  on("psave", async () => { const r = await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); toast(r.plan.warnings.length ? "保存しました（注意があります）" : "保存しました"); reload(); });
+  on("psave", async () => { const r = await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); toast(r.plan.warnings.length ? "保存しました（注意があります）" : "保存しました"); });
   on("approve", async () => { await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); if (!confirm("この内容で書き出しますか\n読み上げと仕上がりチェックで数円かかります")) return; await post(`/api/jobs/${j.id}/approve`); reload(); });
   on("copy", async () => { await navigator.clipboard.writeText(document.getElementById("capout").value); toast("コピーしました"); });
   const completed=document.getElementById('completed-timeline');
@@ -783,5 +818,5 @@ function bindJob(j) {
 }
 
 // パソコンはどこにドロップしても入る
-["dragover", "drop"].forEach((ev) => window.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" && S && e.dataTransfer?.files?.length) window.maDemo.useSamples(); }));
+["dragover", "drop"].forEach((ev) => window.addEventListener(ev, (e) => { e.preventDefault(); if (ev === "drop" && S && e.dataTransfer?.files?.length) addFiles([...e.dataTransfer.files]); }));
 route();
