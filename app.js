@@ -116,9 +116,9 @@ function firstStep(j) {
 
 function shell({ step, chips = "", body, below = "", center = false }) {
   const k = QSTEPS.indexOf(step);
-  const dots = k >= 0 ? `<div class="prog frost"><span class="dots">${QSTEPS.map((_, i) => `<i class="${i <= k ? "on" : ""}"></i>`).join("")}</span><span class="frac">${k + 1} / 5</span></div>` : "";
+  const dots = k >= 0 ? `<div class="prog frost"><span class="dots">${QSTEPS.map((x, i) => `<button type="button" data-go="${x}" aria-label="${["動画", "物件情報", "想定入居者", "編集スタイル", "会社名とロゴ"][i]}に戻る" ${i > k ? "disabled" : ""} class="${i <= k ? "on" : ""}"></button>`).join("")}</span><span class="frac">${k + 1} / 5</span></div>` : "";
   return `<div class="scr ${center ? "center" : ""}">
-    <header class="hd"><a class="mark frost" href="#/new" aria-label="間 ma（新規作成）"><img src="./assets/ma-logo.png" alt="間 ma"></a>${dots}</header>
+    <header class="hd">${S && step !== "a" && ["b","c","d","e","f","more"].includes(step) ? `<button class="back" type="button" data-go="${step === "more" ? "f" : ["a",...QSTEPS][Math.max(0,["a",...QSTEPS].indexOf(step)-1)]}">＜ 戻る</button>` : ""}<a class="mark frost" href="#/new" aria-label="間 ma（新規作成）"><img src="./assets/ma-logo.png" alt="間 ma"></a>${dots}</header>
     ${chips ? `<div class="chips">${chips}</div>` : ""}
     <div class="grow"></div>
     <section class="glass">${body}</section>
@@ -202,10 +202,51 @@ function show(step) {
   if (step !== "a" && !S.job && !S.ups.length) step = "a";
   S.step = step;
   const R = { a: cardA, b: cardB, c: cardC, d: cardD, e: cardE, f: cardF, more: cardMore }[step] || cardA;
-  $app.innerHTML = R();
+  $app.innerHTML = desktop() ? desktopForm() : R();
+  $app.classList.add("input-editor");
+  standardFields();
   $app.querySelectorAll("[data-go]").forEach((b) => (b.onclick = () => go2(b.dataset.go)));
   bindCommon();
   paint();
+}
+const desktop = () => matchMedia("(min-width:1024px)").matches;
+function cardBody(render) {
+  const t = document.createElement("template"); t.innerHTML = render();
+  const body = t.content.querySelector(".glass");
+  body.querySelectorAll("#next,.left,.sum,#make,#why,.c:has(a),button[data-go],h2.ttl2").forEach(el => el.remove());
+  return body.innerHTML;
+}
+function desktopForm() {
+  return `<div class="pc-editor glass"><header class="pc-header"><img src="./assets/ma-logo.png" alt="間 ma"><h1 class="ttl">物件の動画を作る</h1></header>
+    <aside class="pc-media">${pickInput}<video id="source-player" controls playsinline preload="auto" poster="${esc(S.thumbs[sources()[0]?.id] || DEFAULT_BG)}"></video><div id="thumbs" class="thumbs"></div><p id="count" class="count"></p><div id="aiBox"></div><div id="analysis-results"></div></aside>
+    <form class="pc-form" onsubmit="return false"><div class="pc-fields">${[cardC,cardD,cardE,cardF].map(fn=>`<section class="form-section">${cardBody(fn)}</section>`).join("")}<details class="form-details"><summary>詳細情報 <small>任意</small></summary>${cardBody(cardMore)}</details></div><footer class="form-action"><button type="button" class="pill main" id="make">動画を作る</button><p id="why" class="why"></p></footer></form></div>`;
+}
+matchMedia("(min-width:1024px)").addEventListener("change",()=>{ if(S && $app.classList.contains("input-editor")) show(S.step); });
+function standardFields() {
+  $app.querySelectorAll('input:not([type=file]):not([type=checkbox]),textarea,select').forEach((el,i)=>{
+    if (!el.id) el.id = `field-${i}`;
+    let fld=el.closest('.fld');
+    if(!fld){fld=document.createElement('div');fld.className='fld';el.before(fld);fld.append(el);}
+    let label=fld.querySelector('label.lb');
+    if (!label) { label=document.createElement('label'); label.className='lb'; label.textContent=el.getAttribute('aria-label') || '入力'; fld.prepend(label); }
+    label.htmlFor=el.id;
+    const unit={area:'㎡',floor:'階',walk_min:'分',floors_total:'階',management_fee:'円',repair_reserve:'円'}[el.dataset.f];
+    if(unit){const wrap=document.createElement('div');wrap.className='field-unit';el.before(wrap);wrap.append(el);const suffix=document.createElement('span');suffix.textContent=unit;wrap.append(suffix);label.textContent=label.textContent.replace('（㎡）','').replace('（分）','');}
+    if (!label.querySelector('small')) label.insertAdjacentHTML('beforeend',` <small>${['price','layout','company_name'].includes(el.dataset.f)?'必須':'任意'}</small>`);
+    if (!el.placeholder) el.placeholder='例: '+ ({area:'65',floor:'3',walk_min:'5',management_fee:'10000',repair_reserve:'10000',floors_total:'10'}[el.dataset.f] || label.childNodes[0].textContent.trim());
+  });
+  $app.querySelectorAll('.opt input[type=checkbox]').forEach(el=>el.hidden=false);
+}
+function paintSource() {
+  const player=document.getElementById('source-player'), src=sources();
+  if(player && src.length && !src.some(f=>f.id===player.dataset.file)) { player.dataset.file=src[0].id; player.src=window.maDemo.file(src[0].id); }
+  const result=document.getElementById('analysis-results'), a=S.job?.analysis;
+  if(result && a) {
+    const candidates=[['layout','間取り'],['orientation','方角'],['selling_point','見せ場'],['catch_idea','見出し案']].filter(([key])=>S.ai[key] && S.form[key]);
+    const rows=items=>`<dl class="analysis-list">${items.map(([label,value])=>`<div><dt>${esc(label)}</dt><dd>${esc(value)}</dd></div>`).join('')}</dl>`;
+    const html=`<h2 class="ttl2">読み取り結果</h2>${rows(roomsList().map(r=>[r.name,r.features]))}${candidates.length?`<h2 class="ttl2">AI の候補</h2>${rows(candidates.map(([key,label])=>[label,S.form[key]]))}`:''}`;
+    if(result.innerHTML!==html) result.innerHTML=html;
+  }
 }
 function bindCommon() {
   const pick = document.getElementById("pick");
@@ -253,11 +294,11 @@ function cardC() {
     <h1 class="ttl">物件情報</h1>
     <div class="seg" role="radiogroup">${[["sale", "売買"], ["rent", "賃貸"]].map(([k, l]) => `<button type="button" role="radio" aria-checked="${f.deal === k}" class="${f.deal === k ? "on" : ""}" data-deal="${k}">${l}</button>`).join("")}</div>
     <div class="fld" id="fld-price"><label class="lb" for="price">価格 / 賃料</label>
-      <div class="big"><input id="price" data-f="price" inputmode="decimal" autocomplete="off" value="${v(f.price)}" placeholder="0"><span class="unit">万円</span></div></div>
+      <div class="big"><input id="price" data-f="price" inputmode="decimal" autocomplete="off" value="${v(f.price)}" placeholder="例: 12"><span class="unit">万円</span></div></div>
     <hr class="hair">
     <div class="fld" id="fld-layout"><label class="lb" for="layout">間取り</label>
-      <div class="big"><input id="layout" data-f="layout" autocomplete="off" value="${v(f.layout)}" placeholder="${S.job?.status === "analyzing" ? "読み取り中…" : "2LDK"}"></div>${aiBadge("layout")}</div>
-    <div class="fld"><span class="lb">間取り図</span><div class="lg"><button type="button" class="logo" id="floorplanBtn" aria-label="間取り図を選ぶ">${floorplanInner()}</button><button type="button" class="txt u" id="floorplanBtn2">${S.job?.files.some(x => x.kind === "floorplan") || S.floorplanFile ? "変える" : "選ぶ"}</button></div><input type="file" id="floorplanPick" accept="image/png,image/jpeg,image/webp" hidden></div>
+      <div class="big"><input id="layout" data-f="layout" autocomplete="off" value="${v(f.layout)}" placeholder="${S.job?.status === "analyzing" ? "読み取り中…" : "例: 2LDK"}"></div>${aiBadge("layout")}</div>
+    <div class="fld"><span class="lb">間取り図 <small>任意</small></span><div class="lg"><button type="button" class="logo" id="floorplanBtn" aria-label="間取り図を選ぶ">${floorplanInner()}</button><button type="button" class="txt u" id="floorplanBtn2">${S.job?.files.some(x => x.kind === "floorplan") || S.floorplanFile ? "変える" : "選ぶ"}</button></div><input type="file" id="floorplanPick" accept="image/png,image/jpeg,image/webp" hidden></div>
     ${left("c")}
     <button type="button" class="pill main" id="next" data-go="d">次へ</button>` });
 }
@@ -273,7 +314,7 @@ function cardD() {
   const h = S.form.target.household;
   return shell({ step: "d", chips: chipsHtml("d"), body: `
     <h1 class="ttl c">想定入居者</h1>
-    <div class="tiles fld" id="fld-household">${HOUSE.map(([k, l]) => `<button type="button" class="tile ${h === k ? "on" : ""}" data-house="${k}" aria-pressed="${h === k}">${l}${S.ai.household && h === k ? '<i class="aib s">AI案</i>' : ""}</button>`).join("")}</div>
+    <p class="lb">世帯 <small>必須</small></p><div class="tiles fld" id="fld-household">${HOUSE.map(([k, l]) => `<button type="button" class="tile ${h === k ? "on" : ""}" data-house="${k}" aria-pressed="${h === k}">${l}${S.ai.household && h === k ? '<i class="aib s">AI案</i>' : ""}</button>`).join("")}</div>
     ${left("d")}
     <button type="button" class="pill main" id="next" data-go="e">次へ</button>` });
 }
@@ -282,7 +323,7 @@ function cardE() {
   const cur = S.form.catch_strength || "normal";
   return shell({ step: "e", chips: chipsHtml("e"), body: `
     <h1 class="ttl">編集スタイル</h1>
-    <div class="vars">${VARS.map(([k, l], i) => `<button type="button" class="var ${cur === k ? "on" : ""}" data-var="${k}" aria-pressed="${cur === k}"><span class="vth" data-vth="${i}"></span><span class="vl">${l}</span></button>`).join("")}</div>
+    <p class="lb">編集スタイル <small>任意</small></p><div class="vars">${VARS.map(([k, l], i) => `<button type="button" class="var ${cur === k ? "on" : ""}" data-var="${k}" aria-pressed="${cur === k}"><span class="vth" data-vth="${i}"></span><span class="vl">${l}</span></button>`).join("")}</div>
     ${left("e")}
     <button type="button" class="pill main" id="next" data-go="f">次へ</button>` });
 }
@@ -296,7 +337,7 @@ function cardF() {
     <div class="co">
       <div class="fld" id="fld-company_name"><label class="lb" for="company">会社名</label><input id="company" class="mid" data-f="company_name" value="${v(f.company_name)}" placeholder="会社名" autocomplete="organization"></div>
       <div class="vr"></div>
-      <div class="fld" id="fld-logo"><span class="lb">ロゴ</span><div class="lg"><button type="button" class="logo" id="logoBtn" aria-label="ロゴを選ぶ">${logoInner()}</button><button type="button" class="txt u" id="logoBtn2">${hasLogo() ? "変える" : "選ぶ"}</button></div>
+      <div class="fld" id="fld-logo"><span class="lb">ロゴ <small>必須</small></span><div class="lg"><button type="button" class="logo" id="logoBtn" aria-label="ロゴを選ぶ">${logoInner()}</button><button type="button" class="txt u" id="logoBtn2">${hasLogo() ? "変える" : "選ぶ"}</button></div>
       <input type="file" id="logoPick" accept="image/png,image/jpeg,image/webp" hidden></div>
     </div>
     <hr class="hair">
@@ -323,6 +364,7 @@ function logoInner() {
 let mctx = null;
 function fitPrice() {
   const el = document.getElementById("price"); if (!el) return;
+  el.style.width = "100%"; return;
   mctx = mctx || document.createElement("canvas").getContext("2d");
   const cs = getComputedStyle(el); mctx.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
   el.style.width = `${Math.ceil(mctx.measureText(el.value || el.placeholder || "0").width) + 8}px`;
@@ -371,13 +413,14 @@ function roomsList() {
 function paint() {
   if (!S || !$app.querySelector(".glass")) return;
   const st = S.step;
-  if (st === "b") paintB();
-  if (st === "e") paintE();
-  if (st === "c") { const l = document.getElementById("layout"); if (l && document.activeElement !== l && l.value !== S.form.layout) l.value = S.form.layout; const fl = document.getElementById("fld-layout"); fl?.querySelector(".aib")?.remove(); fl?.insertAdjacentHTML("beforeend", aiBadge("layout")); }
-  if (st === "c") { fitPrice(); document.fonts?.ready.then(fitPrice); }
-  if (st === "f") { const lb = document.getElementById("logoBtn"); if (lb) { lb.innerHTML = logoInner(); toneLogo(lb); } const lb2 = document.getElementById("logoBtn2"); if (lb2) lb2.textContent = hasLogo() ? "変える" : "選ぶ"; }
+  if (st === "b" || desktop()) { paintB(); paintSource(); }
+  if (st === "e" || desktop()) paintE();
+  if (st === "c" || desktop()) { const l = document.getElementById("layout"); if (l && document.activeElement !== l && l.value !== S.form.layout) l.value = S.form.layout; const fl = document.getElementById("fld-layout"); fl?.querySelector(".aib")?.remove(); fl?.insertAdjacentHTML("beforeend", aiBadge("layout")); }
+  if (st === "c" || desktop()) { fitPrice(); document.fonts?.ready.then(fitPrice); }
+  if (st === "f" || desktop()) { const lb = document.getElementById("logoBtn"); if (lb) { lb.innerHTML = logoInner(); toneLogo(lb); } const lb2 = document.getElementById("logoBtn2"); if (lb2) lb2.textContent = hasLogo() ? "変える" : "選ぶ"; }
   if (S.floorplanFile && S.job && !RUNNING.has(S.job.status)) uploadFloorplan();
   if (S.logoFile && S.job && S.job.status !== "analyzing") uploadLogo();
+  $app.querySelectorAll('[data-f]').forEach(el=>{const k=el.dataset.f,val=k.startsWith('target.')?S.form.target[k.slice(7)]:S.form[k];if(document.activeElement!==el && el.type!=='checkbox' && val!==undefined && el.value!==String(val)) el.value=val;});
   bindStep(); paintBtn();
 }
 let bound = null;
@@ -416,13 +459,14 @@ function paintB() {
     const full = src.length + live.filter((u) => !u.err).length >= 6;
     if (!full) tiles.push(`<button type="button" class="th add" data-pick ${busy ? "disabled" : ""} aria-label="動画を追加"><img src="./assets/icon-plus.png" alt=""></button>`);
     box.innerHTML = tiles.join("");
+    box.querySelectorAll('[data-fid]').forEach(tile=>{if(!desktop())return;const select=()=>{const player=document.getElementById('source-player');if(player){player.dataset.file=tile.dataset.fid;player.poster=S.thumbs[tile.dataset.fid] || DEFAULT_BG;player.src=window.maDemo.file(tile.dataset.fid);}};tile.tabIndex=0;tile.setAttribute('role','button');tile.setAttribute('aria-label',`${src.findIndex(f=>f.id===tile.dataset.fid)+1}本目を再生`);tile.onclick=e=>{if(!e.target.closest('button'))select();};tile.onkeydown=e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();select();}};});
     box.querySelectorAll("[data-pick]").forEach((b) => (b.onclick = () => document.getElementById("pick").click()));
     box.querySelectorAll("[data-del]").forEach((b) => (b.onclick = async () => {
       if (!confirm("この動画を外しますか？")) return;
       try { await api(`/api/jobs/${S.job.id}/files/${b.dataset.del}`, { method: "DELETE" }); await refresh(); S.needAnalyze = sources().length > 0; if (!sources().length) setBg(null); else bgFromJob(S.job); paint(); maybeAnalyze(); } catch (e) { toast(e.message, true); }
     }));
     box.querySelectorAll("[data-drop]").forEach((b) => (b.onclick = () => { S.ups = S.ups.filter((u) => String(u.k) !== b.dataset.drop); paint(); }));
-    src.forEach((f) => { const im = box.querySelector(`[data-src-fid="${f.id}"]`); const cached = S.thumbs[f.id]; if (cached) im.src = cached; else grabFrame(window.maDemo.file(f.id), 0.35, 240).then((u) => { if (u) { S.thumbs[f.id] = u; im.src = u; } }); });
+    src.forEach((f) => { const im = box.querySelector(`[data-src-fid="${f.id}"]`); const poster=u=>{im.src=u;const player=document.getElementById('source-player');if(player?.dataset.file===f.id)player.poster=u;}; const cached = S.thumbs[f.id]; if (cached) poster(cached); else grabFrame(window.maDemo.file(f.id), 0.35, 480).then((u) => { if (u) { S.thumbs[f.id] = u; poster(u); } }); });
   }
   live.forEach((u) => { const pc = box.querySelector(`[data-k="${u.k}"] .pc`); if (pc && !u.err) pc.textContent = `${Math.round(u.p * 100)}%`; });
   document.getElementById("count").textContent = `${src.length + live.filter((u) => !u.err).length} / 6本`;
@@ -438,7 +482,7 @@ function paintB() {
   else { t = "動画選択待ち"; }
   ai.innerHTML = `<p class="aiT">${esc(t)}</p><div class="bar"><i style="width:${Math.round(bar * 100)}%"></i></div><p class="aiS">${esc(sub)}</p>${btn ? `<button type="button" class="pill sub" id="reAi">${btn}</button>` : ""}`;
   const r = document.getElementById("reAi"); if (r) r.onclick = () => { S.aiErr = ""; S.needAnalyze = true; maybeAnalyze(true); };
-  if ((uploading() || j?.status === "analyzing") && !S.tick) S.tick = setTimeout(() => { S && (S.tick = null); if (S?.step === "b") paintB(); }, 1000);
+  if ((uploading() || j?.status === "analyzing") && !S.tick) S.tick = setTimeout(() => { S && (S.tick = null); if (S && (S.step === "b" || desktop())) paintB(); }, 1000);
 }
 function paintE() {
   const src = sources(); if (!src.length) return;
@@ -550,11 +594,11 @@ function poll() {
     if (before === "analyzing" && S.job.status === "failed") {
       S.aiErr = S.job.error || "動画解析停止"; if (S.job.analysis) S.needAnalyze = true;
       if (S.pending) { S.pending = false; toast(`再解析失敗: ${S.aiErr}`, true); }
-      if (S.step === "c" || S.step === "d") show(S.step); else paint();
+      paint();
       return paintBtn();
     }
     if (before === "analyzing" && S.job.analysis) { applyAutofill(); toast("動画解析完了\n空欄に候補を入れました"); }
-    if (S.step === "c" || S.step === "d") show(S.step); else paint();
+    paint();
     if (S.pending) go();
   }, 3500);
 }
@@ -605,7 +649,8 @@ function paintBtn() {
   why.textContent = m.length ? `あと: ${m.map((x) => x[2]).join("・")}` : "構成を確認してから書き出します";
 }
 function flagMissing(m) {
-  if (S.step !== m[0][0]) go2(m[0][0]);
+  if (!desktop() && S.step !== m[0][0]) go2(m[0][0]);
+  if (desktop()) document.getElementById(m[0][1])?.scrollIntoView({block:"center"});
   setTimeout(() => m.filter((x) => x[0] === S.step).forEach(([, id]) => document.getElementById(id)?.classList.add("miss")), 60);
   toast(`入力が足りません: ${m.map((x) => x[2]).join("・")}`, true);
 }
@@ -661,6 +706,7 @@ function afterShell(j, body) {
     <section class="glass">${body}</section></div>`;
 }
 function jobView(j, keepScroll) {
+  $app.classList.remove("input-editor");
   S = null;
   bgFromJob(j);
   let body = "";
