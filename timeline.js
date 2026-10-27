@@ -94,13 +94,13 @@ export function mountTimeline(root, job, { video, grabFrame, completed=false, ed
   });
   band.addEventListener('pointerup',e=>{
     const g=gesture;if(!g||g.id!==e.pointerId)return;
-    if(g.mode==='trim')onChange('場面の使う範囲を変更');
-    if(g.mode==='order'&&g.target&&g.target!==g.scene){keepRange();const from=scenes.findIndex(s=>s.id===g.scene),to=scenes.findIndex(s=>s.id===g.target);const [s]=scenes.splice(from,1);scenes.splice(to,0,s);onChange('場面の順番を変更');}
+    if(g.mode==='trim')onChange('使用範囲を変更');
+    if(g.mode==='order'&&g.target&&g.target!==g.scene){keepRange();const from=scenes.findIndex(s=>s.id===g.scene),to=scenes.findIndex(s=>s.id===g.target);const [s]=scenes.splice(from,1);scenes.splice(to,0,s);onChange('場面順を変更');}
     const open=!editable&&g.mode==='waiting';cancel();draw();onSelect(current());if(open)onOpen(current().id);
   });
   band.addEventListener('pointercancel',()=>{if(gesture?.mode==='trim'){range.a=gesture.a;range.b=gesture.b;paintRange();}cancel();draw();});
   band.addEventListener('click',e=>{const tile=e.target.closest('.timeline-clip');if(e.detail===0&&tile){select(tile.dataset.scene);seek(current(),current().in || 0);if(!editable)onOpen(current().id);}});
-  selection.querySelectorAll('.trim-handle').forEach(button=>button.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const side=button.classList.contains('start')?'a':'b',s=current(),d=e.key==='ArrowLeft'?-.1:.1;range[side]=round(side==='a'?Math.max(0,Math.min(range.b-.5,range.a+d)):Math.min(max(s),Math.max(range.a+.5,range.b+d)));range.dirty=true;paintRange();seek(s,range[side]);onChange('場面の使う範囲を変更');}));
+  selection.querySelectorAll('.trim-handle').forEach(button=>button.addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight'].includes(e.key))return;e.preventDefault();const side=button.classList.contains('start')?'a':'b',s=current(),d=e.key==='ArrowLeft'?-.1:.1;range[side]=round(side==='a'?Math.max(0,Math.min(range.b-.5,range.a+d)):Math.min(max(s),Math.max(range.a+.5,range.b+d)));range.dirty=true;paintRange();seek(s,range[side]);onChange('使用範囲を変更');}));
   const updateHead=()=>{if(gesture)return;const t=video.maPlayer?.time() ?? video.currentTime;if(completed){const s=scenes.find(s=>{const o=origin(s);return t>=o.start&&t<o.start+o.renderLength;});if(s){const o=origin(s);head.style.left=`${position(s,(o.in || 0)+(t-o.start)/o.renderLength*span(o))}px`;}}else if(current())head.style.left=`${position(current(),t)}px`;};
   video?.addEventListener('timeupdate',updateHead);
   root.addEventListener('dragstart',e=>e.preventDefault());
@@ -125,7 +125,7 @@ export function mountTimeline(root, job, { video, grabFrame, completed=false, ed
       if(b-range.b>=.5)parts.push({...s,id:parts.length?`${s.id}_cut_${crypto.randomUUID().slice(0,8)}`:s.id,originId:s.originId || s.id,in:range.b,duration:round(b-range.b)});
       if(scenes.length===1&&!parts.length)return false;
       for(const part of parts)original.set(part.id,origin(s));
-      scenes.splice(i,1,...parts);selected=null;range=null;select(scenes[Math.min(i,scenes.length-1)].id);draw();onChange('選んだパートを切る');return true;
+      scenes.splice(i,1,...parts);selected=null;range=null;select(scenes[Math.min(i,scenes.length-1)].id);draw();onChange('選択範囲をカット');return true;
     },
     destroy(){disposed=true;cancel();video?.removeEventListener('timeupdate',updateHead);}
   };

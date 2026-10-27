@@ -8,7 +8,7 @@ const $bg = document.getElementById("bgimg");
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const v = (x) => esc(x ?? "");
 const uniq = (a) => [...new Set(a)];
-const STATUS = { draft: "動画アップ待ち", analyzing: "AIが読み取り中", needs_input: "入力中", planning: "構成を作成中", plan_ready: "構成の確認待ち", rendering: "書き出し中", reviewing: "仕上がりを確認中", done: "完成", failed: "止まりました" };
+const STATUS = { draft: "動画選択待ち", analyzing: "動画解析中", needs_input: "入力中", planning: "構成作成中", plan_ready: "構成確認待ち", rendering: "書き出し中", reviewing: "仕上がり確認中", done: "完成", failed: "処理停止" };
 const RUNNING = new Set(["analyzing", "planning", "rendering", "reviewing"]);
 const EDITABLE = new Set(["draft", "analyzing", "needs_input"]);
 const CUR = "rt_cur_job";
@@ -21,7 +21,7 @@ let timer = null;
 async function api(path, opt = {}) {
   const r = await fetch(path, { credentials: "same-origin", ...opt, headers: { ...(opt.body && !(opt.body instanceof Blob) ? { "content-type": "application/json" } : {}), ...(opt.headers || {}) } });
   const d = await r.json().catch(() => ({}));
-  if (r.status === 401 && !path.endsWith("./login")) { location.href = "./login"; throw new Error(d.error || "ログインしてください"); }
+  if (r.status === 401 && !path.endsWith("./login")) { location.href = "./login"; throw new Error(d.error || "ログインが必要です"); }
   if (!r.ok) { const e = new Error(d.error || `エラー（${r.status}）`); e.status = r.status; throw e; }
   return d;
 }
@@ -118,7 +118,7 @@ function shell({ step, chips = "", body, below = "", center = false }) {
   const k = QSTEPS.indexOf(step);
   const dots = k >= 0 ? `<div class="prog frost"><span class="dots">${QSTEPS.map((_, i) => `<i class="${i <= k ? "on" : ""}"></i>`).join("")}</span><span class="frac">${k + 1} / 5</span></div>` : "";
   return `<div class="scr ${center ? "center" : ""}">
-    <header class="hd"><a class="mark frost" href="#/new" aria-label="間 ma（新しく作る）"><img src="./assets/ma-logo.png" alt="間 ma"></a>${dots}</header>
+    <header class="hd"><a class="mark frost" href="#/new" aria-label="間 ma（新規作成）"><img src="./assets/ma-logo.png" alt="間 ma"></a>${dots}</header>
     ${chips ? `<div class="chips">${chips}</div>` : ""}
     <div class="grow"></div>
     <section class="glass">${body}</section>
@@ -142,9 +142,9 @@ function loginView() {
 async function listView() {
   setBg(null);
   const { jobs } = await api("/api/jobs");
-  $app.innerHTML = shell({ step: "", body: `<h1 class="ttl">これまでの動画</h1>
-   <div class="list scroll">${jobs.length ? jobs.map((j) => `<a href="#/job/${esc(j.id)}"><span><b>${esc(j.title)}</b><small>${new Date(j.created_at * 1000).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small></span><em class="st ${j.status === "done" ? "ok" : j.status === "failed" ? "ng" : ""}">${esc(STATUS[j.status] || j.status)}</em></a>`).join("") : '<p class="note">まだありません</p>'}</div>
-   <a class="pill main" href="#/new">新しく作る</a>
+  $app.innerHTML = shell({ step: "", body: `<h1 class="ttl">動画一覧</h1>
+   <div class="list scroll">${jobs.length ? jobs.map((j) => `<a href="#/job/${esc(j.id)}"><span><b>${esc(j.title)}</b><small>${new Date(j.created_at * 1000).toLocaleString("ja-JP", { month: "numeric", day: "numeric", hour: "2-digit", minute: "2-digit" })}</small></span><em class="st ${j.status === "done" ? "ok" : j.status === "failed" ? "ng" : ""}">${esc(STATUS[j.status] || j.status)}</em></a>`).join("") : '<p class="note">動画はありません</p>'}</div>
+   <a class="pill main" href="#/new">新規作成</a>
    <p class="note c"><button class="txt" id="lo">紹介ページへ</button></p>` });
   document.getElementById("lo").onclick = async () => { location.href = "./index.html"; };
 }
@@ -232,10 +232,10 @@ function cardA() {
   return shell({ step: "a", center: true, body: `${pickInput}
     <div class="drop" id="drop">
       <img class="ic" src="./assets/icon-video.png" alt="">
-      <h1 class="ttl c">内見動画を入れる</h1>
+      <h1 class="ttl c">内見動画を選ぶ</h1>
       <p class="sub c">縦向き・6本まで</p>
       <button type="button" class="pill main" data-pick>見本の素材を選ぶ</button>
-    </div>`, below: `<a class="under" href="#/list">これまでの動画</a>` });
+    </div>`, below: `<a class="under" href="#/list">動画一覧</a>` });
 }
 // ---- b 読み取り ----
 function cardB() {
@@ -250,7 +250,7 @@ function cardB() {
 function cardC() {
   const f = S.form;
   return shell({ step: "c", chips: chipsHtml("c"), body: `
-    <h1 class="ttl">物件のこと</h1>
+    <h1 class="ttl">物件情報</h1>
     <div class="seg" role="radiogroup">${[["sale", "売買"], ["rent", "賃貸"]].map(([k, l]) => `<button type="button" role="radio" aria-checked="${f.deal === k}" class="${f.deal === k ? "on" : ""}" data-deal="${k}">${l}</button>`).join("")}</div>
     <div class="fld" id="fld-price"><label class="lb" for="price">価格 / 賃料</label>
       <div class="big"><input id="price" data-f="price" inputmode="decimal" autocomplete="off" value="${v(f.price)}" placeholder="0"><span class="unit">万円</span></div></div>
@@ -272,7 +272,7 @@ function aiBadge(k) {
 function cardD() {
   const h = S.form.target.household;
   return shell({ step: "d", chips: chipsHtml("d"), body: `
-    <h1 class="ttl c">誰に見せたいか</h1>
+    <h1 class="ttl c">想定入居者</h1>
     <div class="tiles fld" id="fld-household">${HOUSE.map(([k, l]) => `<button type="button" class="tile ${h === k ? "on" : ""}" data-house="${k}" aria-pressed="${h === k}">${l}${S.ai.household && h === k ? '<i class="aib s">AI案</i>' : ""}</button>`).join("")}</div>
     ${left("d")}
     <button type="button" class="pill main" id="next" data-go="e">次へ</button>` });
@@ -281,7 +281,7 @@ function cardD() {
 function cardE() {
   const cur = S.form.catch_strength || "normal";
   return shell({ step: "e", chips: chipsHtml("e"), body: `
-    <h1 class="ttl">編集バリエーション</h1>
+    <h1 class="ttl">編集スタイル</h1>
     <div class="vars">${VARS.map(([k, l], i) => `<button type="button" class="var ${cur === k ? "on" : ""}" data-var="${k}" aria-pressed="${cur === k}"><span class="vth" data-vth="${i}"></span><span class="vl">${l}</span></button>`).join("")}</div>
     ${left("e")}
     <button type="button" class="pill main" id="next" data-go="f">次へ</button>` });
@@ -290,9 +290,9 @@ function cardE() {
 function cardF() {
   const f = S.form;
   const n = sources().length + liveUps().filter((u) => !u.err).length;
-  const sum = [["b", `動画 ${n}本`], ["c", [f.deal === "rent" ? "賃貸" : "売買", f.price ? `${f.price}万円` : "価格 未入力", f.layout || "間取り 未入力"].join("・")], ["d", HOUSE.find((x) => x[0] === f.target.household)?.[1] || "誰に 未選択"], ["e", VARS.find((x) => x[0] === f.catch_strength)?.[1] || "上質に"]];
+  const sum = [["b", `動画 ${n}本`], ["c", [f.deal === "rent" ? "賃貸" : "売買", f.price ? `${f.price}万円` : "価格 未入力", f.layout || "間取り 未入力"].join("・")], ["d", HOUSE.find((x) => x[0] === f.target.household)?.[1] || "入居者 未選択"], ["e", VARS.find((x) => x[0] === f.catch_strength)?.[1] || "上質に"]];
   return shell({ step: "f", body: `
-    <h1 class="ttl">会社名 / ロゴ</h1>
+    <h1 class="ttl">会社名・ロゴ</h1>
     <div class="co">
       <div class="fld" id="fld-company_name"><label class="lb" for="company">会社名</label><input id="company" class="mid" data-f="company_name" value="${v(f.company_name)}" placeholder="会社名" autocomplete="organization"></div>
       <div class="vr"></div>
@@ -304,7 +304,7 @@ function cardF() {
     <div class="sum">${sum.map(([s, t], i) => `<button type="button" class="opt ${i === 3 ? "on" : ""}" data-go="${s}">${esc(t)}</button>`).join("")}</div>
     <button type="button" class="pill main" id="make">動画を作る</button>
     <p class="why" id="why"></p>
-    <p class="c"><a class="txt u" href="#/job/${esc(S.job?.id || "")}/more">くわしく入れる（任意）</a></p>` });
+    <p class="c"><a class="txt u" href="#/job/${esc(S.job?.id || "")}/more">詳細情報（任意）</a></p>` });
 }
 function floorplanInner() {
   const file = S.job?.files.find(x => x.kind === "floorplan");
@@ -341,20 +341,20 @@ function cardMore() {
   const qs = (a.unclear || []).filter((u) => !FIELD[u.field]);
   const rooms = roomsList();
   return shell({ step: "more", chips: chipsHtml("more"), body: `
-    <h1 class="ttl">くわしく入れる<span class="opt-l">任意</span></h1>
+    <h1 class="ttl">詳細情報<span class="opt-l">任意</span></h1>
     <div class="scroll">
       ${inp("property_name", "物件名", "例: みなと台レジデンス 1203号室")}
       <div class="g2">${inp("area", "広さ（㎡）", "", "decimal")}${inp("floor", "階", "", "numeric")}${inp("orientation", "向き", "南")}${inp("built", "築年", "築8年")}${inp("station", "最寄り駅", "みなと台駅")}${inp("walk_min", "駅から徒歩（分）", "", "numeric")}</div>
-      ${inp("selling_point", "一番見せたいところ", "例: バルコニーから海が見える")}
-      ${inp("catch_idea", "最初の3秒の一言（12文字まで）", "例: 12階から海を一望")}
-      <p class="note">「最高」「絶景」など いちばんを言う言葉は使えません</p>
-      ${qs.length ? `<h2 class="ttl2">AIからの質問</h2>${qs.map((u) => `<div class="fld"><label class="lb">${esc(u.question)}</label><input class="in" data-q="${esc(u.question)}" value="${v(f.answers[u.question])}"></div>`).join("")}` : ""}
-      ${rooms.length ? `<h2 class="ttl2">部屋ごとに伝えたいこと${!S.roomsTouched && !(S.job?.form?.rooms || []).length ? '<i class="aib">AI案</i>' : ""}</h2>${rooms.map((r, i) => `<div class="rm"><input class="in" data-rm="${i}" data-rk="name" value="${v(r.name)}" aria-label="部屋"><input class="in" data-rm="${i}" data-rk="features" value="${v(r.features)}" aria-label="伝えたいこと"></div>`).join("")}` : ""}
-      <div class="g2">${inp("loan_monthly", "月々のローン目安", "月々12.8万円")}${inp("management_fee", "管理費")}${inp("repair_reserve", "修繕積立金")}${inp("floors_total", "何階建て", "", "numeric")}${inp("target.age", "年齢層", "30代")}${inp("target.kids_ages", "子どもの年齢", "0歳・3歳")}</div>
+      ${inp("selling_point", "見せ場", "例: バルコニーから海が見える")}
+      ${inp("catch_idea", "冒頭コピー（12文字まで）", "例: 12階から海を一望")}
+      <p class="note">「最高」「絶景」などの誇張表現は使用不可</p>
+      ${qs.length ? `<h2 class="ttl2">追加確認</h2>${qs.map((u) => `<div class="fld"><label class="lb">${esc(u.question)}</label><input class="in" data-q="${esc(u.question)}" value="${v(f.answers[u.question])}"></div>`).join("")}` : ""}
+      ${rooms.length ? `<h2 class="ttl2">各部屋の特徴${!S.roomsTouched && !(S.job?.form?.rooms || []).length ? '<i class="aib">AI案</i>' : ""}</h2>${rooms.map((r, i) => `<div class="rm"><input class="in" data-rm="${i}" data-rk="name" value="${v(r.name)}" aria-label="部屋"><input class="in" data-rm="${i}" data-rk="features" value="${v(r.features)}" aria-label="部屋の特徴"></div>`).join("")}` : ""}
+      <div class="g2">${inp("loan_monthly", "月額ローン目安", "月々12.8万円")}${inp("management_fee", "管理費")}${inp("repair_reserve", "修繕積立金")}${inp("floors_total", "総階数", "", "numeric")}${inp("target.age", "年齢層", "30代")}${inp("target.kids_ages", "子どもの年齢", "0歳・3歳")}</div>
       <div class="opts">${[["remote_work", "在宅ワーク"], ["car", "車あり"], ["pet", "ペットあり"]].map(([k, l]) => `<label class="opt ${t[k] ? "on" : ""}"><input type="checkbox" data-f="target.${k}" ${t[k] ? "checked" : ""} hidden>${l}</label>`).join("")}</div>
-      <div class="fld"><label class="lb">言ってはいけないこと・映したくないもの</label><textarea class="in" data-f="ng_items" placeholder="売主のNGなど">${v(f.ng_items)}</textarea></div>
-      ${inp("line_url", "LINEのURL", "https://lin.ee/…")}
-      <div class="g2">${inp("brand_color", "ブランドの色", "#0E2A47")}${inp("deal_type", "取引態様", "仲介・売主")}</div>
+      <div class="fld"><label class="lb">掲載しない内容</label><textarea class="in" data-f="ng_items" placeholder="売主のNGなど">${v(f.ng_items)}</textarea></div>
+      ${inp("line_url", "LINE URL", "https://lin.ee/…")}
+      <div class="g2">${inp("brand_color", "ブランドカラー", "#0E2A47")}${inp("deal_type", "取引態様", "仲介・売主")}</div>
       ${inp("license_no", "宅建業免許番号", "〇〇県知事(1)第00000号")}${inp("address", "所在地")}
     </div>
     <button type="button" class="pill main" data-go="f">戻る</button>` });
@@ -402,7 +402,7 @@ function bindStep() {
   }
   const mk = document.getElementById("make"); if (mk) mk.onclick = submit;
   const nx = document.getElementById("next");
-  if (nx && S.step === "b") nx.onclick = () => { if (!sources().length && !uploading()) return toast("まず動画を入れてください", true); go2("c"); };
+  if (nx && S.step === "b") nx.onclick = () => { if (!sources().length && !uploading()) return toast("動画を選択してください", true); go2("c"); };
 }
 
 function paintB() {
@@ -429,13 +429,13 @@ function paintB() {
   // AIの状態
   const ai = document.getElementById("aiBox"), j = S.job, a = j?.analysis;
   let t = "", bar = 0, sub = "", btn = "";
-  if (uploading()) { const tot = live.reduce((s, u) => s + (u.file?.size || 1), 0) || 1; bar = live.reduce((s, u) => s + u.p * (u.file?.size || 1), 0) / tot; t = "動画を送っています"; sub = "終わるとAIが自動で読み取ります"; }
-  else if (j?.status === "analyzing") { const el = (Date.now() - (S.aiAt || Date.now())) / 1000; bar = Math.min(0.92, 0.08 + el / 150); t = "AIが動画を読んでいます"; sub = "読み取り中… 先に進んでも大丈夫です"; }
-  else if (j?.status === "failed" && !a) { t = "読み取りが止まりました"; sub = j.error || S.aiErr || ""; btn = "もう一度"; }
-  else if (!a && S.aiErr) { t = "読み取りを始められませんでした"; sub = S.aiErr; btn = "もう一度"; }
-  else if (a && S.needAnalyze) { t = "動画が変わりました"; sub = S.aiErr ? `読み直せませんでした: ${S.aiErr}` : "「動画を作る」を押すと読み直してから進みます"; btn = "いま読み直す"; bar = 1; }
-  else if (a) { t = "読み取りました"; bar = 1; sub = uniq((a.rooms || []).map((r) => r.name)).join("・"); }
-  else { t = "動画を待っています"; }
+  if (uploading()) { const tot = live.reduce((s, u) => s + (u.file?.size || 1), 0) || 1; bar = live.reduce((s, u) => s + u.p * (u.file?.size || 1), 0) / tot; t = "動画アップロード中"; sub = "アップロード後に解析します"; }
+  else if (j?.status === "analyzing") { const el = (Date.now() - (S.aiAt || Date.now())) / 1000; bar = Math.min(0.92, 0.08 + el / 150); t = "動画解析中"; sub = "解析中も入力可能"; }
+  else if (j?.status === "failed" && !a) { t = "動画解析停止"; sub = j.error || S.aiErr || ""; btn = "再試行"; }
+  else if (!a && S.aiErr) { t = "動画解析を開始できません"; sub = S.aiErr; btn = "再試行"; }
+  else if (a && S.needAnalyze) { t = "動画変更済み"; sub = S.aiErr ? `再解析失敗: ${S.aiErr}` : "動画を作る前に解析し直します"; btn = "再解析"; bar = 1; }
+  else if (a) { t = "動画解析完了"; bar = 1; sub = uniq((a.rooms || []).map((r) => r.name)).join("・"); }
+  else { t = "動画選択待ち"; }
   ai.innerHTML = `<p class="aiT">${esc(t)}</p><div class="bar"><i style="width:${Math.round(bar * 100)}%"></i></div><p class="aiS">${esc(sub)}</p>${btn ? `<button type="button" class="pill sub" id="reAi">${btn}</button>` : ""}`;
   const r = document.getElementById("reAi"); if (r) r.onclick = () => { S.aiErr = ""; S.needAnalyze = true; maybeAnalyze(true); };
   if ((uploading() || j?.status === "analyzing") && !S.tick) S.tick = setTimeout(() => { S && (S.tick = null); if (S?.step === "b") paintB(); }, 1000);
@@ -465,7 +465,7 @@ let upSeq = 0;
 async function addFiles(list) { window.maDemo.useSamples(); return;
   list = list.filter((x) => /^video\//.test(x.type) || /\.(mov|mp4|m4v)$/i.test(x.name));
   if (!list.length) return;
-  if (S.job?.status === "analyzing") return toast("AIが読み取り中です\n読み取りが終わってから追加してください", true);
+  if (S.job?.status === "analyzing") return toast("動画解析中\n追加は解析完了後", true);
   const room = 6 - sources().length - S.ups.filter((u) => !u.done && !u.err).length;
   if (list.length > room) { toast(`動画は6本までです（あと${Math.max(0, room)}本）`, true); list = list.slice(0, Math.max(0, room)); }
   if (!list.length) return;
@@ -548,12 +548,12 @@ function poll() {
     if (S.job.status === "analyzing") { paint(); return poll(); }
     // 読み直しが止まったとき: 前の読み取り結果が残っていても構成づくりへは進まない
     if (before === "analyzing" && S.job.status === "failed") {
-      S.aiErr = S.job.error || "読み取りが止まりました"; if (S.job.analysis) S.needAnalyze = true;
-      if (S.pending) { S.pending = false; toast(`読み直せませんでした: ${S.aiErr}`, true); }
+      S.aiErr = S.job.error || "動画解析停止"; if (S.job.analysis) S.needAnalyze = true;
+      if (S.pending) { S.pending = false; toast(`再解析失敗: ${S.aiErr}`, true); }
       if (S.step === "c" || S.step === "d") show(S.step); else paint();
       return paintBtn();
     }
-    if (before === "analyzing" && S.job.analysis) { applyAutofill(); toast("AIが動画を読み取りました\n空いている欄にAI案を入れました"); }
+    if (before === "analyzing" && S.job.analysis) { applyAutofill(); toast("動画解析完了\n空欄に候補を入れました"); }
     if (S.step === "c" || S.step === "d") show(S.step); else paint();
     if (S.pending) go();
   }, 3500);
@@ -590,7 +590,7 @@ function missing() {
   if (!sources().length && !uploading()) m.push(["a", "", "動画"]);
   if (!s0(f.price)) m.push(["c", "fld-price", f.deal === "rent" ? "賃料" : "価格"]);
   if (!s0(f.layout) && S.applied) m.push(["c", "fld-layout", "間取り"]);
-  if (!f.target.household) m.push(["d", "fld-household", "誰に見せたいか"]);
+  if (!f.target.household) m.push(["d", "fld-household", "想定入居者"]);
   if (!s0(f.company_name)) m.push(["f", "fld-company_name", "会社名"]);
   if (!hasLogo()) m.push(["f", "fld-logo", "会社ロゴ"]);
   return m;
@@ -599,10 +599,10 @@ const s0 = (x) => String(x ?? "").trim();
 function paintBtn() {
   const btn = document.getElementById("make"); if (!btn || !S) return;
   const why = document.getElementById("why");
-  if (S.pending) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>準備ができたら進みます'; why.textContent = uploading() ? "動画を送り終わるのを待っています" : "AIの読み取りが終わるのを待っています"; return; }
+  if (S.pending) { btn.disabled = true; btn.innerHTML = '<span class="spin"></span>準備中'; why.textContent = uploading() ? "アップロード完了待ち" : "動画解析完了待ち"; return; }
   btn.disabled = false; btn.textContent = "動画を作る";
   const m = missing();
-  why.textContent = m.length ? `あと: ${m.map((x) => x[2]).join("・")}` : "次の画面で構成を確かめてから書き出します";
+  why.textContent = m.length ? `あと: ${m.map((x) => x[2]).join("・")}` : "構成を確認してから書き出します";
 }
 function flagMissing(m) {
   if (S.step !== m[0][0]) go2(m[0][0]);
@@ -646,7 +646,7 @@ const THEMES = [["hotel", "ホテル"], ["modern", "モダン"], ["natural", "�
 function themePicker(j) {
   const recommended = THEMES.some(([id]) => id === j.analysis?.theme) ? j.analysis.theme : "modern";
   const selected = j.plan.theme || recommended;
-  return `<h2 class="ttl2">型を選ぶ</h2><div class="theme-grid" role="group" aria-label="テロップの型">${THEMES.map(([id, label]) => `<button type="button" class="theme-card" data-theme="${id}" aria-pressed="${selected === id}"><img src="./assets/themes/${id}.png" alt="${label}のテロップ見本" loading="lazy"><span>${label}</span>${id === recommended ? '<small>おすすめ</small>' : ""}</button>`).join("")}</div>`;
+  return `<h2 class="ttl2">字幕デザイン</h2><div class="theme-grid" role="group" aria-label="字幕デザイン">${THEMES.map(([id, label]) => `<button type="button" class="theme-card" data-theme="${id}" aria-pressed="${selected === id}"><img src="./assets/themes/${id}.png" alt="${label}の字幕見本" loading="lazy"><span>${label}</span>${id === recommended ? '<small>おすすめ</small>' : ""}</button>`).join("")}</div>`;
 }
 const AFTER = ["構成", "書き出し", "完成"];
 const STEP_OF = { planning: 0, plan_ready: 0, rendering: 1, reviewing: 1, done: 2, failed: 0 };
@@ -654,7 +654,7 @@ const TYPE = { eyecatch: "最初の3秒", logo: "会社ロゴ", overview: "物�
 function afterShell(j, body) {
   const k = STEP_OF[j.status] ?? 0;
   return `<div class="scr">
-    <header class="hd"><a class="mark frost" href="#/list" aria-label="これまでの動画"><img src="./assets/ma-logo.png" alt="間 ma"></a>
+    <header class="hd"><a class="mark frost" href="#/list" aria-label="動画一覧"><img src="./assets/ma-logo.png" alt="間 ma"></a>
       <div class="prog frost"><span class="dots">${AFTER.map((_, i) => `<i class="${i <= k ? "on" : ""}"></i>`).join("")}</span><span class="frac">${AFTER[k]}</span></div></header>
     <div class="chips"><span class="chip frost">${esc(j.title)}</span></div>
     <div class="grow"></div>
@@ -664,23 +664,23 @@ function jobView(j, keepScroll) {
   S = null;
   bgFromJob(j);
   let body = "";
-  const err = j.error ? `<p class="note bad">止まりました: ${esc(j.error)}</p>` : "";
+  const err = j.error ? `<p class="note bad">処理停止: ${esc(j.error)}</p>` : "";
   if (RUNNING.has(j.status)) {
     const last = j.events[j.events.length - 1];
     const plan = j.status === "planning";
-    body = `<h1 class="ttl">${plan ? "構成を考えています" : "書き出しています"}</h1>
+    body = `<h1 class="ttl">${plan ? "構成作成中" : "書き出し中"}</h1>
       <div class="bar run"><i></i></div>
       <p class="aiS">${esc(last?.message || STATUS[j.status])}</p>
-      <p class="note">${plan ? "数秒で構成ができます<br>" : "数秒で完成します<br>"}この画面は閉じても大丈夫です</p>
+      <p class="note">${plan ? "構成作成 数秒<br>" : "書き出し 数秒<br>"}画面を閉じても書き出しは続きます</p>
       ${eventsHtml(j)}`;
   } else if (j.status === "plan_ready" || (j.status === "failed" && j.plan && !j.outputs)) {
     const p = j.plan;
-    body = `<h1 class="ttl">構成の確認</h1>${err}
+    body = `<h1 class="ttl">構成確認</h1>${err}
       <div class="scroll plan">
-        
+        <p class="note">費用は書き出す時だけかかります</p>
         ${(p.warnings || []).length ? `<p class="note warn">${p.warnings.map(esc).join("<br>")}</p>` : ""}
         ${sceneCards(j)}
-        <label class="lb">TikTokの説明文</label><textarea class="in" id="cap" style="min-height:120px">${v(p.caption)}</textarea>
+        <label class="lb">TikTok投稿文</label><textarea class="in" id="cap" style="min-height:120px">${v(p.caption)}</textarea>
         <p class="note">${esc(p.hashtags.join(" "))}</p>
         ${themePicker(j)}
       </div>
@@ -689,21 +689,21 @@ function jobView(j, keepScroll) {
   } else if (j.status === "done") {
     const o = j.outputs || {}, rv = j.review || {};
     const issues = (rv.issues || []).filter((i) => i.severity !== "low");
-    body = `<h1 class="ttl">できました${j.duration ? `<span class="opt-l">${formatSeconds(j.duration)}</span>` : ""}</h1>
+    body = `<h1 class="ttl">完成${j.duration ? `<span class="opt-l">${formatSeconds(j.duration)}</span>` : ""}</h1>
       <div class="scroll done">
         <div id="completed-timeline"><video controls playsinline preload="metadata" src="${esc(o.publish || o.client)}" poster="${esc(o.publish_thumbnail || o.thumbnail)}"></video>${timelineHtml()}</div>
         
-        
-        <label class="lb">TikTokの説明文</label><textarea class="in" id="capout" readonly style="min-height:110px">${v(j.caption)}</textarea>
-        <h2 class="ttl2">AIの自動チェック</h2><p class="note">${esc(rv.summary || "")}</p>
+        <p class="note">投稿用には「AI生成」の表記が入ります<br>BGMのクレジットは消さずに投稿してください</p>
+        <label class="lb">TikTok投稿文</label><textarea class="in" id="capout" readonly style="min-height:110px">${v(j.caption)}</textarea>
+        <h2 class="ttl2">仕上がりチェック</h2><p class="note">${esc(rv.summary || "")}</p>
         ${issues.length ? `<p class="note warn">${issues.map((i) => `${formatSeconds(i.t)}: ${esc(i.detail)}${i.fix ? `（${esc(i.fix)}）` : ""}`).join("<br>")}</p>` : ""}
         <a class="pill sub" href="${esc(o.thumbnail)}?dl=1">サムネイルを保存</a>
 
         ${(j.plan.warnings || []).map(w=>`<p class="note">${esc(w)}</p>`).join("")}
-        <h2 class="ttl2">これまでの版</h2><div class="versions">${(j.versions || []).filter(x=>x.state==="done").map((x,i)=>`<button class="pill sub" data-restore="${x.version}">${x.version}版${j.activeVersion===x.version || (!j.activeVersion && i===0)?" 表示中":" に戻す"}</button>`).join("")}</div>
-        <button type="button" class="pill sub" id="reedit">気になる場面を直す</button>
+        <h2 class="ttl2">保存履歴</h2><div class="versions">${(j.versions || []).filter(x=>x.state==="done").map((x,i)=>`<button class="pill sub" data-restore="${x.version}">${x.version}版${j.activeVersion===x.version || (!j.activeVersion && i===0)?" 表示中":" に戻す"}</button>`).join("")}</div>
+        <button type="button" class="pill sub" id="reedit">場面を修正</button>
       </div>
-      <div class="row2"><button type="button" class="pill sub" id="copy">説明文をコピー</button><a class="pill main" href="#/new">別の物件を作る</a></div>`;
+      <div class="row2"><button type="button" class="pill sub" id="copy">投稿文をコピー</button><a class="pill main" href="#/new">別物件を作成</a></div>`;
   }
   const y = $app.querySelector(".scroll")?.scrollTop || 0;
   $app.innerHTML = afterShell(j, body);
@@ -725,7 +725,7 @@ function bindJob(j) {
   const on = (id, fn) => { const el = document.getElementById(id); if (el) el.onclick = async (e) => { e.preventDefault(); if (el.disabled) return; el.disabled = true; try { await fn(); } catch (err) { toast(err.message, true); } finally { el.disabled = false; } }; };
   const reload = async () => jobView(await api(`/api/jobs/${j.id}`));
   on("psave", async () => { const r = await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); toast(r.plan.warnings.length ? "保存しました（注意があります）" : "保存しました"); reload(); });
-  on("approve", async () => { await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); if (!confirm("この内容で書き出しますか")) return; await post(`/api/jobs/${j.id}/approve`); reload(); });
+  on("approve", async () => { await put(`/api/jobs/${j.id}/plan`, readPlanEdits()); if (!confirm("この内容で書き出しますか\n読み上げと仕上がりチェックで数円かかります")) return; await post(`/api/jobs/${j.id}/approve`); reload(); });
   on("copy", async () => { await navigator.clipboard.writeText(document.getElementById("capout").value); toast("コピーしました"); });
   const completed=document.getElementById('completed-timeline');
   if(completed){
