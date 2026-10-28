@@ -325,7 +325,7 @@ function cardC() {
   return shell({ step: "c", chips: chipsHtml("c"), body: `
     <h1 class="ttl">物件情報</h1>
     <div class="seg" role="radiogroup">${[["sale", "売買"], ["rent", "賃貸"]].map(([k, l]) => `<button type="button" role="radio" aria-checked="${f.deal === k}" class="${f.deal === k ? "on" : ""}" data-deal="${k}">${l}</button>`).join("")}</div>
-    <div class="fld" id="fld-price"><label class="lb" for="price">価格 / 賃料</label>
+    <div class="fld" id="fld-price"><label class="lb" for="price">${f.deal === "rent" ? "賃料" : "価格"}</label>
       <div class="big"><input id="price" data-f="price" inputmode="decimal" autocomplete="off" value="${v(f.price)}" placeholder="例: 12"><span class="unit">万円</span></div></div>
     <hr class="hair">
     <div class="fld" id="fld-layout"><label class="lb" for="layout">間取り</label>
@@ -458,7 +458,7 @@ function paint() {
 let bound = null;
 function bindStep() {
   const g = $app.querySelector(".glass"); if (!g || bound === g) return; bound = g;
-  g.querySelectorAll("[data-deal]").forEach((b) => (b.onclick = () => { S.form.deal = b.dataset.deal; scheduleSave(); if (desktop()) { const y = g.querySelector(".pc-fields")?.scrollTop || 0; show(S.step); const nf = $app.querySelector(".pc-fields"); if (nf) nf.scrollTop = y; return; } g.querySelectorAll("[data-deal]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); }); }));
+  g.querySelectorAll("[data-deal]").forEach((b) => (b.onclick = () => { S.form.deal = b.dataset.deal; scheduleSave(); { const sc = g.querySelector(".pc-fields") || g.querySelector(".scroll"), y = sc?.scrollTop || 0; show(S.step); const nf = $app.querySelector(".pc-fields") || $app.querySelector(".scroll"); if (nf) nf.scrollTop = y; return; } g.querySelectorAll("[data-deal]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-checked", x === b); }); }));
   g.querySelectorAll("[data-house]").forEach((b) => (b.onclick = () => { S.form.target.household = b.dataset.house; delete S.ai.household; g.querySelectorAll("[data-house]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); x.querySelector(".aib")?.remove(); }); document.getElementById("fld-household")?.classList.remove("miss"); scheduleSave(); paintBtn(); }));
   g.querySelectorAll("[data-var]").forEach((b) => (b.onclick = () => { S.form.catch_strength = b.dataset.var; g.querySelectorAll("[data-var]").forEach((x) => { x.classList.toggle("on", x === b); x.setAttribute("aria-pressed", x === b); }); scheduleSave(); }));
   g.querySelectorAll("[data-q]").forEach((el) => (el.oninput = () => { S.form.answers[el.dataset.q] = el.value.trim(); scheduleSave(); }));
