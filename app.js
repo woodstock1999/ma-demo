@@ -775,12 +775,12 @@ function jobView(j, keepScroll) {
         
         <p class="note">投稿用には「AI生成」の表記が入ります<br>BGMのクレジットは消さずに投稿してください</p>
         <label class="lb">TikTok投稿文</label><textarea class="in" id="capout" readonly style="min-height:110px">${v(j.caption)}</textarea>
-        <h2 class="ttl2">仕上がりチェック</h2><p class="note">${esc(rv.summary || "")}</p>
+        ${rv.summary || issues.length ? `<h2 class="ttl2">仕上がりチェック</h2><p class="note">${esc(rv.summary || "")}</p>` : ""}
         ${issues.length ? `<p class="note warn">${issues.map((i) => `${formatSeconds(i.t)}: ${esc(i.detail)}${i.fix ? `（${esc(i.fix)}）` : ""}`).join("<br>")}</p>` : ""}
-        <a class="pill sub" href="${esc(o.thumbnail)}?dl=1">サムネイルを保存</a>
+        <a class="pill sub" href="${esc(o.thumbnail)}?dl=1">サムネイル画像を保存</a>
 
         ${(j.plan.warnings || []).map(w=>`<p class="note">${esc(w)}</p>`).join("")}
-        <h2 class="ttl2">保存履歴</h2><div class="versions">${(j.versions || []).filter(x=>x.state==="done").map((x,i)=>`<button class="pill sub" data-restore="${x.version}">${x.version}版${j.activeVersion===x.version || (!j.activeVersion && i===0)?" 表示中":" に戻す"}</button>`).join("")}</div>
+        <h2 class="ttl2">これまでの版</h2><div class="versions">${(j.versions || []).filter(x=>x.state==="done").map((x,i)=>`<button class="pill sub" data-restore="${x.version}">${x.version}版${j.activeVersion===x.version || (!j.activeVersion && i===0)?" 表示中":" に戻す"}</button>`).join("")}</div>
         <button type="button" class="pill sub" id="reedit">場面を修正</button>
       </div>
       <div class="row2"><button type="button" class="pill sub" id="copy">投稿文をコピー</button><a class="pill main" href="#/new">別物件を作成</a></div>`;

@@ -190,3 +190,5 @@ video::-webkit-media-controls-overlay-enclosure{display:none}
 .pc-v2 .pf.miss .pf-in input,.pc-v2 .pf.miss .pf-pill{border-color:#c0392b}
 .pc-v2 .pc-media video{height:34dvh;max-height:360px;margin-bottom:6px}.pc-v2 .pc-media{gap:6px}.pc-v2 .pc-media .aiT{margin:2px 0}
 .pc-v2 .pc-sec>h2,.pc-v2 .pc-h{text-align:center}.pc-v2 .pc-sec>.pc-tabs{display:flex;width:max-content;margin:0 auto 16px}
+
+@media(min-width:1024px){#app .hd .mark{background:#35453d;border-radius:12px}#app .hd .mark img{filter:none}}
